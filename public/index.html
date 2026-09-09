@@ -259,12 +259,12 @@
             <p>Real-time population data analysis from Department of Statistics Malaysia</p>
 
             <div class="controls">
-                <button class="btn btn-primary" id="refreshBtn" onclick="confirmRefresh()">
+                <button class="btn btn-primary" id="refreshBtn" onclick="handleRefreshClick()">
                     🔄 Refresh Data
                 </button>
                 <div class="status" id="status" style="display: none;"></div>
             </div>
-            <p style="color: #999; font-size: 0.9em; margin-top: 10px;">Each refresh uses 1 FireCrawl API credit</p>
+            <p style="color: #999; font-size: 0.9em; margin-top: 10px;">⚠️ Each refresh uses 1 FireCrawl API credit</p>
             <div class="error-message" id="errorMessage"></div>
             <div class="last-updated" id="lastUpdated"></div>
         </div>
@@ -342,10 +342,18 @@
     <script>
         let charts = {};
 
-        function confirmRefresh() {
-            const message = `⚠️ This will run a FireCrawl API scrape and use 1 API credit.\n\nContinue?`;
-            if (confirm(message)) {
+        function handleRefreshClick() {
+            const btn = document.getElementById('refreshBtn');
+
+            // Show confirmation dialog
+            const confirmed = confirm('⚠️ WARNING ⚠️\n\nThis will:\n• Run FireCrawl API scrape\n• Use 1 API credit\n• Fetch latest population data\n\nContinue?');
+
+            if (confirmed) {
+                console.log('User confirmed refresh');
                 refreshData();
+            } else {
+                console.log('User cancelled refresh');
+                // Cancelled - do nothing
             }
         }
 
@@ -357,7 +365,7 @@
             btn.disabled = true;
             statusDiv.style.display = 'block';
             statusDiv.className = 'status loading';
-            statusDiv.textContent = '⏳ Running FireCrawl scrape... (API credit being used)';
+            statusDiv.textContent = '⏳ Fetching fresh data from FireCrawl... (1 API credit being used now)';
             errorDiv.classList.remove('show');
 
             try {
@@ -375,17 +383,21 @@
                     throw new Error(data.error);
                 }
 
-                // Save CSV to localStorage
-                saveToLocalStorage(data.csv);
+                // Save CSV to localStorage with fresh timestamp
+                saveFreshDataToLocalStorage(data.csv, data.timestamp);
 
                 // Update UI with new data
                 updateDashboard(data);
 
                 statusDiv.className = 'status success';
-                statusDiv.textContent = '✓ Data refreshed successfully! (1 API credit used)';
+                statusDiv.textContent = '✓ Fresh data loaded successfully! (1 API credit used)';
 
+                // Show timestamp of when data was FETCHED
                 const now = new Date().toLocaleString();
-                document.getElementById('lastUpdated').textContent = `Last updated: ${now}`;
+                document.getElementById('lastUpdated').innerHTML = `
+                    <strong>Last FETCHED (Fresh):</strong> ${now}<br>
+                    <span style="font-size: 0.9em; color: #10b981;">✓ This is fresh data from FireCrawl API</span>
+                `;
 
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
@@ -403,6 +415,16 @@
             }
         }
 
+        function saveFreshDataToLocalStorage(csv, timestamp) {
+            try {
+                localStorage.setItem('population_csv', csv);
+                localStorage.setItem('csv_timestamp', new Date().toISOString());
+                localStorage.setItem('csv_is_fresh', 'true'); // Mark as fresh data
+            } catch (e) {
+                console.warn('Could not save to localStorage:', e);
+            }
+        }
+
         function saveToLocalStorage(csv) {
             try {
                 localStorage.setItem('population_csv', csv);
@@ -416,6 +438,7 @@
             try {
                 const csv = localStorage.getItem('population_csv');
                 const timestamp = localStorage.getItem('csv_timestamp');
+                const isFresh = localStorage.getItem('csv_is_fresh') === 'true';
 
                 if (csv) {
                     console.log('Loaded CSV from local storage');
@@ -424,7 +447,21 @@
 
                     if (timestamp) {
                         const date = new Date(timestamp);
-                        document.getElementById('lastUpdated').textContent = `Last updated: ${date.toLocaleString()} (cached locally)`;
+                        const timeStr = date.toLocaleString();
+
+                        if (isFresh) {
+                            // This is fresh data from API
+                            document.getElementById('lastUpdated').innerHTML = `
+                                <strong>Last FETCHED (Fresh):</strong> ${timeStr}<br>
+                                <span style="font-size: 0.9em; color: #10b981;">✓ This is fresh data from FireCrawl API</span>
+                            `;
+                        } else {
+                            // This is loaded from local storage (stale)
+                            document.getElementById('lastUpdated').innerHTML = `
+                                <strong>Last LOADED from Browser Storage:</strong> ${timeStr}<br>
+                                <span style="font-size: 0.9em; color: #666;">ℹ️ This data was previously fetched. Click Refresh to get latest.</span>
+                            `;
+                        }
                     }
                     return true;
                 }
@@ -609,6 +646,10 @@
 
         // Load initial data on page load
         window.addEventListener('load', () => {
+            // Mark data as not-fresh (since we're just loading from browser storage)
+            // This will show "Last LOADED" instead of "Last FETCHED" on page refresh
+            localStorage.setItem('csv_is_fresh', 'false');
+
             // Try to load from local storage first
             const loaded = loadFromLocalStorage();
 
