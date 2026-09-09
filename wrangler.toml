@@ -20,3 +20,8 @@ vars = { ENVIRONMENT = "production" }
 [build]
 command = "npm run build"
 cwd = "./"
+pages_build_output_dir = "public"
+
+# Pages configuration
+[pages]
+project_name = "population-dashboard-pages"
