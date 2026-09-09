@@ -408,18 +408,24 @@
     gap: 8px;
   }
 
-  @media (max-width: 860px) {
-    .chart-grid { grid-template-columns: 1fr; }
+  /* Tablet / unfolded-phone tier: stack header above actions, split the two
+     buttons evenly so neither the row nor the button widths look lopsided,
+     and keep the 2x2 chart grid (dropping to 1 column here made single
+     charts too wide/flat for this range). */
+  @media (max-width: 900px) {
     .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .topbar { flex-direction: column; align-items: stretch; }
+    .actions-col { align-items: stretch; }
+    .action-group .btn { flex: 1; }
+    .credit-note { justify-content: flex-start; }
   }
 
   @media (max-width: 640px) {
     .shell { padding: 18px 16px 48px; }
-    .topbar { flex-direction: column; align-items: stretch; }
-    .actions-col { align-items: stretch; }
+    .topbar h1 { font-size: 1.55rem; }
+    .chart-grid { grid-template-columns: 1fr; }
     .action-group { flex-direction: column; }
     .btn { width: 100%; justify-content: center; }
-    .topbar h1 { font-size: 1.55rem; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi-value { font-size: 1.35rem; }
   }
