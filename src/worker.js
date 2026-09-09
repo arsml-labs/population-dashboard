@@ -3,13 +3,13 @@
  * Handles FireCrawl API calls and CSV retrieval
  */
 
-const FIRECRAWL_API_KEY = 'fc-5cd6568e771341069972df076d55e693';
 const FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev/v0';
 const DATA_URL = 'https://open.dosm.gov.my/data-catalogue/population_malaysia';
 const CSV_URL = 'https://storage.dosm.gov.my/population/population_malaysia.csv';
 
 export default {
   async fetch(request, env, ctx) {
+    const FIRECRAWL_API_KEY = env.FIRECRAWL_API_KEY;
     // Enable CORS
     const headers = {
       'Content-Type': 'application/json',
@@ -28,7 +28,7 @@ export default {
 
     // Routes
     if (path === '/api/scrape' && request.method === 'POST') {
-      return handleScrape(env, headers);
+      return handleScrape(FIRECRAWL_API_KEY, headers, ctx);
     }
 
     if (path === '/' || path === '/index.html') {
@@ -47,9 +47,13 @@ export default {
   },
 };
 
-async function handleScrape(env, headers) {
+async function handleScrape(apiKey, headers, ctx) {
   try {
     console.log('Starting scrape process...');
+
+    if (!apiKey) {
+      throw new Error('FIRECRAWL_API_KEY not configured');
+    }
 
     // Check cache first
     const cache = caches.default;
@@ -71,7 +75,7 @@ async function handleScrape(env, headers) {
     const scrapeResponse = await fetch(`${FIRECRAWL_BASE_URL}/scrape`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
