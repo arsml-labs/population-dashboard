@@ -259,11 +259,12 @@
             <p>Real-time population data analysis from Department of Statistics Malaysia</p>
 
             <div class="controls">
-                <button class="btn btn-primary" id="refreshBtn" onclick="refreshData()">
+                <button class="btn btn-primary" id="refreshBtn" onclick="confirmRefresh()">
                     🔄 Refresh Data
                 </button>
                 <div class="status" id="status" style="display: none;"></div>
             </div>
+            <p style="color: #999; font-size: 0.9em; margin-top: 10px;">Each refresh uses 1 FireCrawl API credit</p>
             <div class="error-message" id="errorMessage"></div>
             <div class="last-updated" id="lastUpdated"></div>
         </div>
@@ -341,6 +342,13 @@
     <script>
         let charts = {};
 
+        function confirmRefresh() {
+            const message = `⚠️ This will run a FireCrawl API scrape and use 1 API credit.\n\nContinue?`;
+            if (confirm(message)) {
+                refreshData();
+            }
+        }
+
         async function refreshData() {
             const btn = document.getElementById('refreshBtn');
             const statusDiv = document.getElementById('status');
@@ -349,7 +357,7 @@
             btn.disabled = true;
             statusDiv.style.display = 'block';
             statusDiv.className = 'status loading';
-            statusDiv.textContent = '⏳ Refreshing data...';
+            statusDiv.textContent = '⏳ Running FireCrawl scrape... (API credit being used)';
             errorDiv.classList.remove('show');
 
             try {
@@ -367,11 +375,14 @@
                     throw new Error(data.error);
                 }
 
+                // Save CSV to localStorage
+                saveToLocalStorage(data.csv);
+
                 // Update UI with new data
                 updateDashboard(data);
 
                 statusDiv.className = 'status success';
-                statusDiv.textContent = '✓ Data refreshed successfully!';
+                statusDiv.textContent = '✓ Data refreshed successfully! (1 API credit used)';
 
                 const now = new Date().toLocaleString();
                 document.getElementById('lastUpdated').textContent = `Last updated: ${now}`;
@@ -390,6 +401,37 @@
             } finally {
                 btn.disabled = false;
             }
+        }
+
+        function saveToLocalStorage(csv) {
+            try {
+                localStorage.setItem('population_csv', csv);
+                localStorage.setItem('csv_timestamp', new Date().toISOString());
+            } catch (e) {
+                console.warn('Could not save to localStorage:', e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const csv = localStorage.getItem('population_csv');
+                const timestamp = localStorage.getItem('csv_timestamp');
+
+                if (csv) {
+                    console.log('Loaded CSV from local storage');
+                    const data = { csv: csv };
+                    updateDashboard(data);
+
+                    if (timestamp) {
+                        const date = new Date(timestamp);
+                        document.getElementById('lastUpdated').textContent = `Last updated: ${date.toLocaleString()} (cached locally)`;
+                    }
+                    return true;
+                }
+            } catch (e) {
+                console.warn('Could not load from localStorage:', e);
+            }
+            return false;
         }
 
         function updateDashboard(data) {
@@ -567,7 +609,21 @@
 
         // Load initial data on page load
         window.addEventListener('load', () => {
-            refreshData();
+            // Try to load from local storage first
+            const loaded = loadFromLocalStorage();
+
+            if (!loaded) {
+                // If no local data, show message to user
+                const tableBody = document.getElementById('tableBody');
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px;">
+                            <p>📊 No data loaded yet</p>
+                            <p style="margin-top: 10px; color: #999; font-size: 0.9em;">Click "🔄 Refresh Data" to fetch latest population statistics</p>
+                        </td>
+                    </tr>
+                `;
+            }
         });
     </script>
 </body>

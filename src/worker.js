@@ -49,28 +49,13 @@ export default {
 
 async function handleScrape(apiKey, headers, ctx) {
   try {
-    console.log('Starting scrape process...');
+    console.log('Starting fresh scrape process...');
 
     if (!apiKey) {
       throw new Error('FIRECRAWL_API_KEY not configured');
     }
 
-    // Check cache first
-    const cache = caches.default;
-    const cacheKey = new Request(new URL('/cache/population-data', 'http://cache'), {
-      method: 'GET',
-    });
-
-    let cachedData = await cache.match(cacheKey);
-    if (cachedData) {
-      console.log('Returning cached data');
-      return new Response(cachedData.body, {
-        status: 200,
-        headers: { ...headers, 'X-Cache': 'hit' },
-      });
-    }
-
-    // Scrape page with FireCrawl
+    // Always scrape fresh (no caching)
     console.log('Scraping page with FireCrawl...');
     const scrapeResponse = await fetch(`${FIRECRAWL_BASE_URL}/scrape`, {
       method: 'POST',
@@ -98,7 +83,7 @@ async function handleScrape(apiKey, headers, ctx) {
 
     const csv = await csvResponse.text();
 
-    // Prepare response
+    // Prepare response (no caching)
     const responseData = JSON.stringify({
       success: true,
       timestamp: new Date().toISOString(),
@@ -106,17 +91,9 @@ async function handleScrape(apiKey, headers, ctx) {
       recordCount: csv.split('\n').length - 2,
     });
 
-    // Cache the response for 1 hour
-    const response = new Response(responseData, {
-      status: 200,
-      headers: { ...headers, 'X-Cache': 'miss' },
-    });
-
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
     return new Response(responseData, {
       status: 200,
-      headers: { ...headers, 'X-Cache': 'miss' },
+      headers,
     });
 
   } catch (error) {
