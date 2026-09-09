@@ -19,9 +19,7 @@
   ],
   "author": "MyEazy Digital",
   "license": "MIT",
-  "dependencies": {
-    "firecrawl": "^0.0.11"
-  },
+  "dependencies": {},
   "devDependencies": {
     "wrangler": "^3.0.0"
   },
