@@ -2,6 +2,7 @@
 # Both frontend (public/) and backend (functions/) auto-deploy from GitHub
 
 # Environment variables
+[env.production]
 vars = { ENVIRONMENT = "production" }
 
 # Build configuration
