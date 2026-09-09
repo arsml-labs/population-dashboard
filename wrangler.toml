@@ -1,5 +1,17 @@
-# Cloudflare Pages Configuration
-# Git-connected auto-deploy
+# Cloudflare Worker Configuration
+# Git-connected auto-deploy (Workers Builds runs `wrangler deploy` on every push)
+
+name = "population-dashboard-pages"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["streams_enable_constructors"]
+
+# Environment variables
+vars = { ENVIRONMENT = "production" }
+
+# Static assets served directly; the Worker only handles /api/*
+[assets]
+directory = "public"
 
 # Build configuration
 [build]
