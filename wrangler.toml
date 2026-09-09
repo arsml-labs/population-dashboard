@@ -1,13 +1,6 @@
 # Cloudflare Pages with Functions Configuration
 # Both frontend (public/) and backend (functions/) auto-deploy from GitHub
 
-# Pages Project name
-name = "population-dashboard-pages"
-
-# Compatibility settings
-compatibility_date = "2024-01-01"
-compatibility_flags = ["streams_enable_constructors"]
-
 # Environment variables
 vars = { ENVIRONMENT = "production" }
 
@@ -16,3 +9,4 @@ vars = { ENVIRONMENT = "production" }
 command = "npm run build"
 cwd = "./"
 watch_paths = ["public/**/*", "functions/**/*"]
+pages_build_output_dir = "public"
