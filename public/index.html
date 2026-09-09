@@ -295,6 +295,35 @@
   /* ---------- Table ---------- */
 
   .table-card { margin-top: 14px; }
+
+  .table-head-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .table-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .search-input {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: var(--radius-s);
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 0.85rem;
+    width: 220px;
+    max-width: 100%;
+  }
+  .search-input::placeholder { color: var(--ink-faint); }
+  .search-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .btn-small { padding: 8px 13px; font-size: 0.82rem; }
+
   .table-scroll { overflow-x: auto; margin-top: 4px; border: 1px solid var(--border); border-radius: var(--radius-s); }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 560px; }
@@ -311,7 +340,13 @@
     text-transform: uppercase;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
   }
+  thead th:hover { color: var(--accent); }
+  thead th.sorted { color: var(--accent); }
+  thead th .sort-arrow { display: inline-block; width: 0.8em; opacity: 0.6; }
   th.num-col, td.num-col { text-align: right; }
 
   tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--ink); }
@@ -513,17 +548,28 @@
   </section>
 
   <div class="card table-card">
-    <h2>Latest population data</h2>
-    <div class="card-sub">First 15 rows for the most recent year</div>
+    <div class="table-head-row">
+      <div>
+        <h2>Latest population data</h2>
+        <div class="card-sub" id="tableCount">First 15 rows for the most recent year</div>
+      </div>
+      <div class="table-tools">
+        <input type="search" class="search-input" id="tableSearch" placeholder="Filter by sex, age or ethnicity…" oninput="onTableSearch(this.value)" disabled />
+        <button class="btn btn-ghost btn-small" id="downloadBtn" onclick="downloadCsv()" disabled title="Download the full dataset as CSV">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg>
+          Download CSV
+        </button>
+      </div>
+    </div>
     <div class="table-scroll">
       <table id="dataTable">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Sex</th>
-            <th>Age group</th>
-            <th>Ethnicity</th>
-            <th class="num-col">Population ('000)</th>
+            <th data-key="date" onclick="sortBy('date')">Date <span class="sort-arrow"></span></th>
+            <th data-key="sex" onclick="sortBy('sex')">Sex <span class="sort-arrow"></span></th>
+            <th data-key="age" onclick="sortBy('age')">Age group <span class="sort-arrow"></span></th>
+            <th data-key="ethnicity" onclick="sortBy('ethnicity')">Ethnicity <span class="sort-arrow"></span></th>
+            <th class="num-col" data-key="population" onclick="sortBy('population')">Population ('000) <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="tableBody">
@@ -564,6 +610,10 @@
 <script>
   let charts = {};
   let latestRecords = [];
+  let rawCsvText = '';
+  let tableRows = [];
+  let tableSort = { key: null, dir: 1 };
+  let tableFilter = '';
 
   function paletteColors() {
     const style = getComputedStyle(document.documentElement);
@@ -572,6 +622,27 @@
   function tone(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
+
+  /* Tap-to-see-data on every chart, including the trend line (its hit area
+     is otherwise just the 0px-radius points, which touch/click can't hit). */
+  Chart.defaults.font.family = "'Public Sans', sans-serif";
+  Chart.defaults.color = tone('--ink-soft');
+  Chart.defaults.interaction.mode = 'nearest';
+  Chart.defaults.interaction.intersect = false;
+  Chart.defaults.plugins.tooltip.backgroundColor = tone('--ink');
+  Chart.defaults.plugins.tooltip.titleColor = tone('--bg');
+  Chart.defaults.plugins.tooltip.bodyColor = tone('--bg');
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.titleFont = { family: "'Public Sans', sans-serif", weight: '600', size: 12 };
+  Chart.defaults.plugins.tooltip.bodyFont = { family: "'IBM Plex Mono', monospace", size: 12 };
+  Chart.defaults.plugins.tooltip.callbacks.title = () => '';
+  Chart.defaults.plugins.tooltip.callbacks.label = (ctx) => {
+    const value = ctx.parsed.y ?? ctx.parsed;
+    const label = ctx.dataset.label || ctx.label || '';
+    const formatted = Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    return `${label ? label + ': ' : ''}${formatted} thousand`;
+  };
 
   /* ---------- Split actions: Refresh (free) vs Run scrape (costs credit) ---------- */
 
@@ -688,6 +759,7 @@
   /* ---------- Rendering ---------- */
 
   function updateDashboard(csv) {
+    rawCsvText = csv;
     const lines = csv.split('\n');
     const records = [];
     for (let i = 1; i < lines.length; i++) {
@@ -719,7 +791,14 @@
     updateAgeChart(latestYear);
     updateTrendChart(records);
     updateGenderChart(latestYear);
-    updateTable(latestYear.slice(0, 15));
+
+    tableRows = latestYear;
+    tableSort = { key: null, dir: 1 };
+    tableFilter = '';
+    document.getElementById('tableSearch').value = '';
+    document.getElementById('tableSearch').disabled = false;
+    document.getElementById('downloadBtn').disabled = false;
+    renderTable();
   }
 
   const chartFont = { family: "'Public Sans', sans-serif", size: 11 };
@@ -796,8 +875,63 @@
     });
   }
 
-  function updateTable(data) {
+  const TABLE_DISPLAY_LIMIT = 25;
+
+  function onTableSearch(value) {
+    tableFilter = value.trim().toLowerCase();
+    renderTable();
+  }
+
+  function sortBy(key) {
+    tableSort = tableSort.key === key
+      ? { key, dir: tableSort.dir * -1 }
+      : { key, dir: 1 };
+    renderTable();
+  }
+
+  function renderTable() {
+    let rows = tableRows;
+
+    if (tableFilter) {
+      rows = rows.filter(r =>
+        r.sex.includes(tableFilter) ||
+        r.age.includes(tableFilter) ||
+        r.ethnicity.includes(tableFilter) ||
+        r.date.includes(tableFilter)
+      );
+    }
+
+    if (tableSort.key) {
+      const { key, dir } = tableSort;
+      rows = [...rows].sort((a, b) => {
+        const av = a[key], bv = b[key];
+        if (typeof av === 'number') return (av - bv) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+
+    const shown = rows.slice(0, TABLE_DISPLAY_LIMIT);
+    renderTableRows(shown);
+    updateSortArrows();
+
+    const countEl = document.getElementById('tableCount');
+    if (rows.length === 0) {
+      countEl.textContent = tableFilter ? `No rows match “${tableFilter}”` : 'No rows for this year';
+    } else if (rows.length > shown.length) {
+      countEl.textContent = `Showing ${shown.length} of ${rows.length.toLocaleString()}${tableFilter ? ' matching' : ''} rows`;
+    } else {
+      countEl.textContent = `Showing all ${rows.length.toLocaleString()}${tableFilter ? ' matching' : ''} rows`;
+    }
+  }
+
+  function renderTableRows(data) {
     const tbody = document.getElementById('tableBody');
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5">
+        <div class="empty-state"><span class="glyph">◔</span><p>No matching rows</p><p class="hint">Try a different search term.</p></div>
+      </td></tr>`;
+      return;
+    }
     tbody.innerHTML = data.map(d => `
       <tr>
         <td>${d.date}</td>
@@ -807,6 +941,29 @@
         <td class="num-col num">${d.population.toLocaleString()}</td>
       </tr>
     `).join('');
+  }
+
+  function updateSortArrows() {
+    document.querySelectorAll('#dataTable thead th').forEach(th => {
+      const arrow = th.querySelector('.sort-arrow');
+      const active = th.dataset.key === tableSort.key;
+      th.classList.toggle('sorted', active);
+      arrow.textContent = active ? (tableSort.dir === 1 ? '↑' : '↓') : '';
+    });
+  }
+
+  function downloadCsv() {
+    if (!rawCsvText) return;
+    const blob = new Blob([rawCsvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `malaysia-population-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   /* ---------- Boot ---------- */
