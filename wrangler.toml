@@ -1,0 +1,38 @@
+name = "population-dashboard"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["streams_enable_constructors"]
+
+# Routes for the worker
+route = "/*"
+
+# Environment variables
+[env.production]
+name = "population-dashboard-prod"
+route = "population-dashboard.pages.dev/*"
+vars = { ENVIRONMENT = "production" }
+
+[env.development]
+name = "population-dashboard-dev"
+route = "population-dashboard-dev.pages.dev/*"
+vars = { ENVIRONMENT = "development" }
+
+# KV Namespace bindings for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "population-cache"
+preview_id = "population-cache-preview"
+
+# Analytics Engine
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "./"
+watch_paths = ["src/**/*.js", "public/**/*"]
+
+# Triggers for scheduled events (optional - for periodic updates)
+[[triggers.crons]]
+cron = "0 0 * * *"  # Daily at midnight

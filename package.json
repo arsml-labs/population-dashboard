@@ -1,0 +1,31 @@
+{
+  "name": "population-dashboard",
+  "version": "1.0.0",
+  "description": "Malaysia Population Data Dashboard with FireCrawl API Integration",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "build": "echo 'Building dashboard...'",
+    "start": "wrangler pages dev public"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "pages",
+    "dashboard",
+    "firecrawl",
+    "web-scraping"
+  ],
+  "author": "MyEazy Digital",
+  "license": "MIT",
+  "dependencies": {
+    "firecrawl": "^0.0.11"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
