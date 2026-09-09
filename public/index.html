@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js"></script>
 <style>
   :root {
     --bg: #f7f6f3;
@@ -559,6 +560,10 @@
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg>
           Download CSV
         </button>
+        <button class="btn btn-ghost btn-small" id="pptxBtn" onclick="downloadPptx()" disabled title="Export the dashboard as a PowerPoint file with live, editable charts">
+          <svg class="icon" id="pptxIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 14v-4a2 2 0 0 1 2-2h1.5a2 2 0 1 1 0 4H7"/><path d="M8 21h8"/></svg>
+          Export PowerPoint
+        </button>
       </div>
     </div>
     <div class="table-scroll">
@@ -610,10 +615,33 @@
 <script>
   let charts = {};
   let latestRecords = [];
+  let latestYearRecords = [];
   let rawCsvText = '';
   let tableRows = [];
   let tableSort = { key: null, dir: 1 };
   let tableFilter = '';
+  let kpiData = {};
+
+  function labelize(str) {
+    return String(str).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  /* Row-filter predicates shared by the on-screen Chart.js charts and the
+     PowerPoint export, so both always show identical figures. */
+  function ethnicityRowsFrom(data) {
+    return data.filter(r => r.age === 'overall' && r.sex === 'both' && r.ethnicity !== 'overall');
+  }
+  function ageRowsFrom(data) {
+    return data.filter(r => r.age !== 'overall' && r.sex === 'both' && r.ethnicity === 'overall')
+      .sort((a, b) => parseInt(a.age) - parseInt(b.age));
+  }
+  function trendRowsFrom(data) {
+    return data.filter(r => r.sex === 'both' && r.age === 'overall' && r.ethnicity === 'overall')
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
+  function genderRowsFrom(data) {
+    return data.filter(r => r.age === 'overall' && r.ethnicity === 'overall' && r.sex !== 'both');
+  }
 
   function paletteColors() {
     const style = getComputedStyle(document.documentElement);
@@ -792,19 +820,33 @@
     updateTrendChart(records);
     updateGenderChart(latestYear);
 
+    latestYearRecords = latestYear;
+    kpiData = {
+      latestYearLabel: latestYearStr,
+      yearsRange: `${years[0]}–${latestYearStr}`,
+      totalPopText: document.getElementById('totalPop').textContent,
+      maleText: document.getElementById('malePop').textContent,
+      femaleText: document.getElementById('femalePop').textContent,
+      maleMeta: document.getElementById('maleMeta').textContent,
+      femaleMeta: document.getElementById('femaleMeta').textContent,
+      recordsText: document.getElementById('totalRecords').textContent,
+      recordsMeta: document.getElementById('recordsMeta').textContent,
+    };
+
     tableRows = latestYear;
     tableSort = { key: null, dir: 1 };
     tableFilter = '';
     document.getElementById('tableSearch').value = '';
     document.getElementById('tableSearch').disabled = false;
     document.getElementById('downloadBtn').disabled = false;
+    document.getElementById('pptxBtn').disabled = false;
     renderTable();
   }
 
   const chartFont = { family: "'Public Sans', sans-serif", size: 11 };
 
   function updateEthnicityChart(data) {
-    const rows = data.filter(r => r.age === 'overall' && r.sex === 'both' && r.ethnicity !== 'overall');
+    const rows = ethnicityRowsFrom(data);
     const ctx = document.getElementById('ethnicityChart').getContext('2d');
     if (charts.ethnicity) charts.ethnicity.destroy();
     charts.ethnicity = new Chart(ctx, {
@@ -821,8 +863,7 @@
   }
 
   function updateAgeChart(data) {
-    const rows = data.filter(r => r.age !== 'overall' && r.sex === 'both' && r.ethnicity === 'overall')
-      .sort((a, b) => parseInt(a.age) - parseInt(b.age));
+    const rows = ageRowsFrom(data);
     const ctx = document.getElementById('ageChart').getContext('2d');
     if (charts.age) charts.age.destroy();
     charts.age = new Chart(ctx, {
@@ -840,8 +881,7 @@
   }
 
   function updateTrendChart(data) {
-    const rows = data.filter(r => r.sex === 'both' && r.age === 'overall' && r.ethnicity === 'overall')
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const rows = trendRowsFrom(data);
     const ctx = document.getElementById('trendChart').getContext('2d');
     if (charts.trend) charts.trend.destroy();
     const grad = ctx.createLinearGradient(0, 0, 0, 240);
@@ -862,7 +902,7 @@
   }
 
   function updateGenderChart(data) {
-    const rows = data.filter(r => r.age === 'overall' && r.ethnicity === 'overall' && r.sex !== 'both');
+    const rows = genderRowsFrom(data);
     const ctx = document.getElementById('genderChart').getContext('2d');
     if (charts.gender) charts.gender.destroy();
     charts.gender = new Chart(ctx, {
@@ -889,7 +929,7 @@
     renderTable();
   }
 
-  function renderTable() {
+  function filteredSortedTableRows() {
     let rows = tableRows;
 
     if (tableFilter) {
@@ -910,6 +950,11 @@
       });
     }
 
+    return rows;
+  }
+
+  function renderTable() {
+    const rows = filteredSortedTableRows();
     const shown = rows.slice(0, TABLE_DISPLAY_LIMIT);
     renderTableRows(shown);
     updateSortArrows();
@@ -964,6 +1009,211 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  /* ---------- PowerPoint export ----------
+     Builds native, editable PowerPoint charts (OOXML chart parts with an
+     embedded Excel workbook) via PptxGenJS — NOT screenshots/images — so
+     the recipient can right-click any chart in PowerPoint and "Edit Data
+     in Excel" to change the underlying numbers. */
+
+  const PPTX_THEME = {
+    bg: 'F7F6F3', surface: 'FFFFFF', surfaceAlt: 'F1F0EC',
+    border: 'E5E2DA', ink: '191A18', inkSoft: '5B5D56', inkFaint: '97998F',
+    accent: '1F5E52',
+    pal: ['1F5E52', '9B7245', '4C6F9C', 'A15C72', '7C8A6B', '6B6F76'],
+  };
+  const PPTX_FONT_HEAD = 'Georgia';
+  const PPTX_FONT_BODY = 'Calibri';
+
+  function pptxAddCardChart(slide, pptx, chartType, data, opts) {
+    const { x, y, w, h, title, sub, chartOptions } = opts;
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x, y, w, h, rectRadius: 0.05,
+      fill: { color: PPTX_THEME.surface },
+      line: { color: PPTX_THEME.border, width: 0.75 },
+    });
+    slide.addText(title, {
+      x: x + 0.22, y: y + 0.14, w: w - 0.44, h: 0.3,
+      fontFace: PPTX_FONT_HEAD, fontSize: 13, bold: true, color: PPTX_THEME.ink,
+    });
+    slide.addText(sub, {
+      x: x + 0.22, y: y + 0.44, w: w - 0.44, h: 0.24,
+      fontFace: PPTX_FONT_BODY, fontSize: 9, color: PPTX_THEME.inkFaint,
+    });
+    slide.addChart(chartType, data, Object.assign({
+      x: x + 0.18, y: y + 0.72, w: w - 0.36, h: h - 0.92,
+      chartColors: PPTX_THEME.pal,
+      chartColorsOpacity: 100,
+    }, chartOptions));
+  }
+
+  async function downloadPptx() {
+    if (!latestYearRecords.length || typeof PptxGenJS === 'undefined') return;
+
+    const btn = document.getElementById('pptxBtn');
+    const icon = document.getElementById('pptxIcon');
+    const errorDiv = document.getElementById('errorMessage');
+    btn.disabled = true;
+    icon.classList.add('spin-icon');
+    setStatus('loading', 'Building PowerPoint…');
+
+    try {
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      pptx.author = 'Malaysia Population Dashboard';
+      pptx.title = 'Population Dashboard — Malaysia';
+      pptx.subject = 'Sex, age-group and ethnicity breakdowns for Malaysia';
+
+      pptx.defineSlideMaster({
+        title: 'DASH_MASTER',
+        background: { color: PPTX_THEME.bg },
+        objects: [
+          { line: { x: 0, y: 7.32, w: '100%', h: 0, line: { color: PPTX_THEME.border, width: 0.75 } } },
+          { text: { text: 'Malaysia Population Dashboard', options: { x: 0.4, y: 7.38, w: 6, h: 0.28, fontFace: PPTX_FONT_BODY, fontSize: 9, color: PPTX_THEME.inkFaint } } },
+          { text: { text: 'Source: Department of Statistics Malaysia', options: { x: 8.3, y: 7.38, w: 4.6, h: 0.28, align: 'right', fontFace: PPTX_FONT_BODY, fontSize: 9, color: PPTX_THEME.inkFaint } } },
+        ],
+      });
+
+      /* ---- Slide 1: title + KPIs ---- */
+      const s1 = pptx.addSlide({ masterName: 'DASH_MASTER' });
+      s1.addText('DEPARTMENT OF STATISTICS MALAYSIA  ·  OPEN.DOSM.GOV.MY', {
+        x: 0.5, y: 0.5, w: 12.3, h: 0.3, fontFace: PPTX_FONT_BODY, fontSize: 11, bold: true, color: PPTX_THEME.accent,
+      });
+      s1.addText('Population Dashboard', {
+        x: 0.5, y: 0.82, w: 12.3, h: 0.75, fontFace: PPTX_FONT_HEAD, fontSize: 36, bold: true, color: PPTX_THEME.ink,
+      });
+      s1.addText('Sex, age-group and ethnicity breakdowns for Malaysia, tracked year over year.', {
+        x: 0.5, y: 1.55, w: 10, h: 0.4, fontFace: PPTX_FONT_BODY, fontSize: 14, color: PPTX_THEME.inkSoft,
+      });
+
+      const kpis = [
+        { label: 'TOTAL POPULATION', value: kpiData.totalPopText, meta: `Year ${kpiData.latestYearLabel}`, color: PPTX_THEME.pal[0] },
+        { label: 'MALE POPULATION', value: kpiData.maleText, meta: kpiData.maleMeta, color: PPTX_THEME.pal[2] },
+        { label: 'FEMALE POPULATION', value: kpiData.femaleText, meta: kpiData.femaleMeta, color: PPTX_THEME.pal[3] },
+        { label: 'RECORDS LOADED', value: kpiData.recordsText, meta: kpiData.recordsMeta, color: PPTX_THEME.pal[5] },
+      ];
+      const kpiW = 2.9, kpiGap = 0.25, kpiX0 = 0.5, kpiY = 2.3, kpiH = 1.5;
+      kpis.forEach((k, i) => {
+        const x = kpiX0 + i * (kpiW + kpiGap);
+        s1.addShape(pptx.ShapeType.roundRect, {
+          x, y: kpiY, w: kpiW, h: kpiH, rectRadius: 0.05,
+          fill: { color: PPTX_THEME.surface }, line: { color: PPTX_THEME.border, width: 0.75 },
+        });
+        s1.addShape(pptx.ShapeType.rect, { x, y: kpiY, w: 0.05, h: kpiH, fill: { color: k.color }, line: { type: 'none' } });
+        s1.addText(k.label, { x: x + 0.22, y: kpiY + 0.16, w: kpiW - 0.44, h: 0.28, fontFace: PPTX_FONT_BODY, fontSize: 9, bold: true, color: PPTX_THEME.inkFaint });
+        s1.addText(k.value || '—', { x: x + 0.22, y: kpiY + 0.46, w: kpiW - 0.44, h: 0.55, fontFace: PPTX_FONT_BODY, fontSize: 22, bold: true, color: PPTX_THEME.ink });
+        s1.addText(k.meta || '', { x: x + 0.22, y: kpiY + 1.06, w: kpiW - 0.44, h: 0.3, fontFace: PPTX_FONT_BODY, fontSize: 10, color: PPTX_THEME.inkSoft });
+      });
+
+      s1.addText(`Generated ${new Date().toLocaleString()}  ·  Data: open.dosm.gov.my/data-catalogue/population_malaysia`, {
+        x: 0.5, y: 4.05, w: 12.3, h: 0.3, fontFace: PPTX_FONT_BODY, fontSize: 10, color: PPTX_THEME.inkFaint,
+      });
+      s1.addText('Charts on the following slides are native, editable PowerPoint charts with an embedded data sheet — right-click a chart and choose "Edit Data in Excel" to update the numbers.', {
+        x: 0.5, y: 4.4, w: 9.5, h: 0.6, fontFace: PPTX_FONT_BODY, italic: true, fontSize: 10.5, color: PPTX_THEME.inkSoft,
+      });
+
+      /* ---- Slide 2: charts, native OOXML charts w/ embedded workbook ---- */
+      const s2 = pptx.addSlide({ masterName: 'DASH_MASTER' });
+      s2.addText(`Breakdown, latest year (${kpiData.latestYearLabel})`, {
+        x: 0.5, y: 0.32, w: 12.3, h: 0.4, fontFace: PPTX_FONT_HEAD, fontSize: 20, bold: true, color: PPTX_THEME.ink,
+      });
+
+      const ethRows = ethnicityRowsFrom(latestYearRecords);
+      const ageRows = ageRowsFrom(latestYearRecords);
+      const trendRows = trendRowsFrom(latestRecords);
+      const genderRows = genderRowsFrom(latestYearRecords);
+
+      const gx = 0.5, gy = 0.9, cw = 6.05, ch = 3.0, gap = 0.2;
+
+      pptxAddCardChart(s2, pptx, pptx.ChartType.doughnut,
+        [{ name: 'Population', labels: ethRows.map(r => labelize(r.ethnicity)), values: ethRows.map(r => r.population) }],
+        {
+          x: gx, y: gy, w: cw, h: ch, title: 'By ethnicity', sub: "Share of total population, in thousands",
+          chartOptions: { holeSize: 55, showLegend: true, legendPos: 'r', legendColor: PPTX_THEME.inkSoft, legendFontSize: 9, showPercent: true, dataLabelColor: PPTX_THEME.ink, dataLabelFontSize: 9 },
+        });
+
+      pptxAddCardChart(s2, pptx, pptx.ChartType.bar,
+        [{ name: "Population ('000)", labels: ageRows.map(r => r.age), values: ageRows.map(r => r.population) }],
+        {
+          x: gx + cw + gap, y: gy, w: cw, h: ch, title: 'By age group', sub: 'Population in thousands',
+          chartOptions: {
+            barDir: 'col', showLegend: false, chartColors: [PPTX_THEME.pal[0]],
+            catAxisLabelColor: PPTX_THEME.inkFaint, catAxisLabelFontSize: 8,
+            valAxisLabelColor: PPTX_THEME.inkFaint, valAxisLabelFontSize: 8,
+            catGridLine: { style: 'none' }, valGridLine: { color: PPTX_THEME.border, style: 'solid', size: 0.75 },
+          },
+        });
+
+      pptxAddCardChart(s2, pptx, pptx.ChartType.line,
+        [{ name: 'Total population', labels: trendRows.map(r => r.date.slice(0, 4)), values: trendRows.map(r => r.population) }],
+        {
+          x: gx, y: gy + ch + gap, w: cw, h: ch, title: 'Historical trend', sub: 'Total population by year, in thousands',
+          chartOptions: {
+            showLegend: false, chartColors: [PPTX_THEME.pal[0]], lineSize: 2.5, lineSmooth: true, lineDataSymbol: 'none',
+            catAxisLabelColor: PPTX_THEME.inkFaint, catAxisLabelFontSize: 8,
+            valAxisLabelColor: PPTX_THEME.inkFaint, valAxisLabelFontSize: 8,
+            catGridLine: { style: 'none' }, valGridLine: { color: PPTX_THEME.border, style: 'solid', size: 0.75 },
+          },
+        });
+
+      pptxAddCardChart(s2, pptx, pptx.ChartType.pie,
+        [{ name: 'Population', labels: genderRows.map(r => labelize(r.sex)), values: genderRows.map(r => r.population) }],
+        {
+          x: gx + cw + gap, y: gy + ch + gap, w: cw, h: ch, title: 'Gender split', sub: 'Male vs. female, overall, in thousands',
+          chartOptions: { chartColors: [PPTX_THEME.pal[2], PPTX_THEME.pal[3]], showLegend: true, legendPos: 'r', legendColor: PPTX_THEME.inkSoft, legendFontSize: 9, showPercent: true, dataLabelColor: 'FFFFFF', dataLabelFontSize: 9 },
+        });
+
+      /* ---- Slide 3: data table (mirrors the on-screen table's current filter/sort) ---- */
+      const s3 = pptx.addSlide({ masterName: 'DASH_MASTER' });
+      s3.addText('Latest population data', {
+        x: 0.5, y: 0.32, w: 12.3, h: 0.35, fontFace: PPTX_FONT_HEAD, fontSize: 20, bold: true, color: PPTX_THEME.ink,
+      });
+
+      const rows = filteredSortedTableRows();
+      const shown = rows.slice(0, TABLE_DISPLAY_LIMIT);
+      s3.addText(
+        rows.length > shown.length
+          ? `Showing ${shown.length} of ${rows.length.toLocaleString()} rows for ${kpiData.latestYearLabel}${tableFilter ? ` matching “${tableFilter}”` : ''} — download CSV from the dashboard for the full dataset.`
+          : `Showing all ${rows.length.toLocaleString()} rows for ${kpiData.latestYearLabel}${tableFilter ? ` matching “${tableFilter}”` : ''}.`,
+        { x: 0.5, y: 0.68, w: 12.3, h: 0.3, fontFace: PPTX_FONT_BODY, fontSize: 10, color: PPTX_THEME.inkFaint }
+      );
+
+      const tableHeader = ['Date', 'Sex', 'Age group', 'Ethnicity', "Population ('000)"].map(t => ({
+        text: t,
+        options: { bold: true, color: PPTX_THEME.inkSoft, fill: { color: PPTX_THEME.surfaceAlt }, fontSize: 9 },
+      }));
+      const tableBody = shown.map(d => ([
+        { text: d.date, options: {} },
+        { text: labelize(d.sex), options: {} },
+        { text: d.age, options: {} },
+        { text: labelize(d.ethnicity), options: {} },
+        { text: d.population.toLocaleString(undefined, { maximumFractionDigits: 1 }), options: { align: 'right' } },
+      ]));
+
+      s3.addTable([tableHeader, ...tableBody], {
+        x: 0.5, y: 1.05, w: 12.3,
+        colW: [1.9, 1.5, 2.0, 3.9, 3.0],
+        fontFace: PPTX_FONT_BODY, fontSize: 9, color: PPTX_THEME.ink,
+        border: { type: 'solid', pt: 0.5, color: PPTX_THEME.border },
+        autoPage: true, autoPageRepeatHeader: true, autoPageHeaderRows: 1, autoPageLineWeight: 0,
+        masterSlideName: 'DASH_MASTER', newSlideStartY: 0.5,
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      await pptx.writeFile({ fileName: `malaysia-population-dashboard-${stamp}.pptx` });
+
+      setStatus('success', '✓ PowerPoint downloaded');
+      hideStatusSoon(3000);
+    } catch (error) {
+      console.error('PPTX export failed:', error);
+      setStatus('error', '✗ PowerPoint export failed');
+      errorDiv.textContent = `Error: ${error.message}`;
+      errorDiv.classList.add('show');
+    } finally {
+      btn.disabled = false;
+      icon.classList.remove('spin-icon');
+    }
   }
 
   /* ---------- Boot ---------- */
