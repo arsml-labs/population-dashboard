@@ -1,13 +1,7 @@
-# Cloudflare Pages with Functions Configuration
-# Both frontend (public/) and backend (functions/) auto-deploy from GitHub
-
-# Environment variables
-[env.production]
-vars = { ENVIRONMENT = "production" }
+# Cloudflare Pages Configuration
+# Git-connected auto-deploy
 
 # Build configuration
 [build]
 command = "npm run build"
 cwd = "./"
-watch_paths = ["public/**/*", "functions/**/*"]
-pages_build_output_dir = "public"
