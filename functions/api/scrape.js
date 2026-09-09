@@ -43,12 +43,14 @@ export async function onRequest(context) {
 async function handleScrape(context, headers) {
   try {
     const { env } = context;
-    const apiKey = env.FIRECRAWL_API_KEY;
+    // Try to get API key from environment or request
+    const apiKey = env?.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API_KEY;
 
     console.log('Starting fresh scrape process...');
+    console.log('API Key available:', !!apiKey);
 
     if (!apiKey) {
-      throw new Error('FIRECRAWL_API_KEY not configured');
+      throw new Error('FIRECRAWL_API_KEY not configured in environment');
     }
 
     // Always scrape fresh (no caching)
